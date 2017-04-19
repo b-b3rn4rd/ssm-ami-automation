@@ -1,0 +1,82 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Creates IAM roles requiredSSMLambdaARN for SSM"
+Outputs:
+  EC2InstanceProfile:
+    Value: !Ref "EC2InstanceProfile"
+  SSMRoleARN:
+    Value: !GetAtt "SSMRole.Arn"
+  LambdaRoleARN:
+    Value: !GetAtt "LambdaRole.Arn"
+Resources:
+  EC2InstanceRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+        - Effect: "Allow"
+          Principal:
+            Service:
+            - "ssm.amazonaws.com"
+            - "ec2.amazonaws.com"
+          Action: "sts:AssumeRole"
+      ManagedPolicyArns:
+      - "arn:aws:iam::aws:policy/service-role/AmazonEC2RoleforSSM"
+      Path: "/"
+  EC2InstanceProfile:
+    Type: "AWS::IAM::InstanceProfile"
+    Properties:
+      Path: "/"
+      Roles:
+      - !Ref "EC2InstanceRole"
+  SSMRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+        - Effect: "Allow"
+          Principal:
+            Service:
+            - "ssm.amazonaws.com"
+            - "ec2.amazonaws.com"
+          Action: "sts:AssumeRole"
+      ManagedPolicyArns:
+      - "arn:aws:iam::aws:policy/service-role/AmazonSSMAutomationRole"
+      Path: "/"
+      Policies:
+      - PolicyName: "passrole"
+        PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+          - Effect: "Allow"
+            Action:
+            - "iam:PassRole"
+            Resource:
+            - !GetAtt "EC2InstanceRole.Arn"
+  LambdaRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+        - Effect: "Allow"
+          Principal:
+            Service:
+            - "lambda.amazonaws.com"
+          Action: "sts:AssumeRole"
+      ManagedPolicyArns:
+      - "arn:aws:iam::aws:policy/AWSLambdaExecute"
+      - "arn:aws:iam::aws:policy/AmazonSSMFullAccess"
+      - "arn:aws:iam::aws:policy/service-role/AmazonSSMAutomationRole"
+      Path: "/"
+      Policies:
+      - PolicyName: "passrole"
+        PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+          - Effect: "Allow"
+            Action:
+            - "iam:PassRole"
+            Resource:
+            - !GetAtt "SSMRole.Arn"

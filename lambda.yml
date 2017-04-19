@@ -1,0 +1,61 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Creates lambda function to trigger SSM automation and allows it to be invoked by SNS"
+Parameters:
+  NewAMITopicARN:
+    Description: "New AMI SNS topic ARN"
+    Type: "String"
+    Default: "arn:aws:sns:us-east-1:137112412989:amazon-linux-ami-updates"
+  LambdaRoleARN:
+    Description: "Lambda role ARN"
+    Type: "String"
+  SSMRoleARN:
+    Description: "SSM role ARN"
+    Type: "String"
+  SSMAutomationDocument:
+    Description: "Automation document name"
+    Type: "String"
+Outputs:
+    SSMLambdaARN:
+      Value: !GetAtt "SSMLambda.Arn"
+Resources:
+  SSMLambda:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      Handler: "index.lambda_handler"
+      Runtime: "python2.7"
+      Role: !Ref "LambdaRoleARN"
+      Timeout: 15
+      Environment:
+        Variables:
+          DocumentName: !Ref "SSMAutomationDocument"
+          AutomationAssumeRoleARN: !Ref "SSMRoleARN"
+      Code:
+        ZipFile: |
+          import os
+          import boto3
+          import logging
+          import operator
+          from datetime import datetime
+          def lambda_handler(event, context):
+            logger = logging.getLogger(__name__)
+            logger.addHandler(logging.StreamHandler())
+            logger.setLevel(logging.INFO)
+            ec2_client = boto3.client('ec2')
+            ssm_client = boto3.client('ssm')
+
+            response = ec2_client.describe_images(Owners=['amazon'], Filters=[{'Name': 'name', 'Values': ['amzn-ami-hvm-????.??.??.*-x86_64-gp2']}])
+            images = [{'ImageId':image['ImageId'], 'CreationDate': datetime.strptime(image['CreationDate'], '%Y-%m-%dT%H:%M:%S.%fZ')} for image in response['Images']]
+            images = sorted(images, reverse=True, key=operator.itemgetter('CreationDate'))
+            ami_id = images[0]['ImageId']
+            logger.info("ami-id: {}".format(ami_id))
+            response = ssm_client.start_automation_execution(DocumentName=os.environ['DocumentName'],
+              Parameters={'SourceAmiId': [ami_id,], 'AutomationAssumeRoleARN': [os.environ['AutomationAssumeRoleARN'],]}
+            )
+            logger.info(response)
+  SSMLambdaInvokePermission:
+    Type: "AWS::Lambda::Permission"
+    Properties:
+      FunctionName: !GetAtt "SSMLambda.Arn"
+      Action: "lambda:InvokeFunction"
+      Principal: "sns.amazonaws.com"
+      SourceArn: !Ref "NewAMITopicARN"

@@ -1,0 +1,29 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Creates SNS topic for SSM service notifications and subsribe to it by email"
+Parameters:
+  NotificationEmail:
+    Description: "Notification email address for SSM updates"
+    AllowedPattern: "^.+@.+$"
+    Type: "String"
+    MinLength: 5
+Resources:
+  SSMTopic:
+    Type: "AWS::SNS::Topic"
+    Properties:
+      Subscription:
+        -
+          Endpoint: !Ref "NotificationEmail"
+          Protocol: "email-json"
+  SSMEventRule:
+    Type: "AWS::Events::Rule"
+    Properties:
+      Description: "Send SSM state change notifications to SNS"
+      EventPattern:
+        source:
+          - "aws.ssm"
+        detail-type:
+          - "EC2 Automation Execution Status-change Notification"
+      State: "ENABLED"
+      Targets:
+        - Arn: !Ref "SSMTopic"
+          Id: "SNSTopic"

@@ -1,0 +1,105 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "AWS CloudFormation template to automate AMI patching process"
+Parameters:
+  SubnetId:
+    Description: "VPC Subnet ID"
+    Type: "AWS::EC2::Subnet::Id"
+  EC2InstanceProfile:
+    Description: "EC2 instance profile name"
+    Type: "String"
+  SSMRoleARN:
+    Description: "SSM service role ARN"
+    Type: "String"
+Outputs:
+  SSMAutomationDocument:
+    Value: !Ref "SSMAutomationDocument"
+Resources:
+  SSMAutomationDocument:
+    Type: "AWS::SSM::Document"
+    Properties:
+      DocumentType: "Automation"
+      Content:
+        schemaVersion: "0.3"
+        description: "Update a Linux AMI."
+        assumeRole: "{{AutomationAssumeRoleARN}}"
+        parameters:
+          SourceAmiId:
+            type: "String"
+            description: "The source Amazon Machine Image ID."
+          SubnetId:
+            type: "String"
+            description: "Subnet id"
+            default: !Ref "SubnetId"
+          InstanceProfileName:
+            type: "String"
+            description: "EC2 IAM profile that is allowed to perform RunCommand."
+            default: !Ref "EC2InstanceProfile"
+          AutomationAssumeRoleARN:
+            type: "String"
+            description: "Role under which to execute this automation."
+            default: !Ref "SSMRoleARN"
+          TargetAmiName:
+            type: "String"
+            description: "The name of the new AMI that will be created."
+            default: ami-{{SourceAmiId}}-{{global:DATE_TIME}}
+          InstanceType:
+            type: "String"
+            description: "Type of instance to launch as the workspace host."
+            default: "t2.micro"
+        mainSteps:
+        - name: "launchInstance"
+          action: "aws:runInstances"
+          maxAttempts: 3
+          timeoutSeconds: 1200
+          onFailure: "Abort"
+          inputs:
+            SubnetId: "{{SubnetId}}"
+            ImageId: "{{SourceAmiId}}"
+            InstanceType: "{{InstanceType}}"
+            UserData: IyEvYmluL2Jhc2gNCmNkIC90bXANCmN1cmwgaHR0cHM6Ly9zMy5hbWF6b25hd3MuY29tL2VjMi1kb3dubG9hZHMtd2luZG93cy9TU01BZ2VudC9sYXRlc3QvbGludXhfYW1kNjQvYW1hem9uLXNzbS1hZ2VudC5ycG0gLW8gYW1hem9uLXNzbS1hZ2VudC5ycG0NCnl1bSBpbnN0YWxsIC15IGFtYXpvbi1zc20tYWdlbnQucnBt
+            MinInstanceCount: 1
+            MaxInstanceCount: 1
+            IamInstanceProfileName: "{{InstanceProfileName}}"
+        - name: "installRequiredPackages"
+          action: "aws:runCommand"
+          maxAttempts: 3
+          timeoutSeconds: 1200
+          onFailure: "Abort"
+          inputs:
+            DocumentName: "AWS-RunShellScript"
+            InstanceIds:
+            - "{{launchInstance.InstanceIds}}"
+            Parameters:
+              commands:
+              - set -e
+              - sudo yum update -y
+              - sudo yum install -y awslogs
+              - sudo yum -y install collectd
+        - name: "stopInstance"
+          action: "aws:changeInstanceState"
+          maxAttempts: 3
+          timeoutSeconds: 1200
+          onFailure: "Abort"
+          inputs:
+            InstanceIds:
+            - "{{launchInstance.InstanceIds}}"
+            DesiredState: stopped
+        - name: "createImage"
+          action: "aws:createImage"
+          maxAttempts: 3
+          onFailure: "Abort"
+          inputs:
+            InstanceId: "{{launchInstance.InstanceIds}}"
+            ImageName: "{{TargetAmiName}}"
+            NoReboot: true
+            ImageDescription: "AMI Generated from {{SourceAmiId}}"
+        - name: "terminateInstance"
+          action: "aws:changeInstanceState"
+          maxAttempts: 3
+          onFailure: "Continue"
+          inputs:
+            InstanceIds:
+            - "{{launchInstance.InstanceIds}}"
+            DesiredState: "terminated"
+        outputs:
+        - createImage.ImageId

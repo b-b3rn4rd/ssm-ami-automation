@@ -1,0 +1,49 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "AWS CloudFormation template to automate AMI patching process"
+Outputs:
+  SSMLambdaARN:
+    Value: !GetAtt "SSMLambda.Outputs.SSMLambdaARN"
+Parameters:
+  SubnetId:
+    Description: "VPC Subnet ID"
+    Type: "AWS::EC2::Subnet::Id"
+  NewAMITopicARN:
+    Description: "New AMI SNS topic ARN"
+    Type: "String"
+    Default: "arn:aws:sns:us-east-1:137112412989:amazon-linux-ami-updates"
+  NotificationEmail:
+    Description: "Notification email address for SSM updates"
+    AllowedPattern: "^.+@.+$"
+    Type: "String"
+    MinLength: 5
+  S3BucketName:
+    Type: "String"
+    MinLength: 3
+Resources:
+  SSMRoles:
+    Type: "AWS::CloudFormation::Stack"
+    Properties:
+      TemplateURL: !Sub "https://s3.amazonaws.com/${S3BucketName}/roles.yml"
+  SSMDocument:
+    Type: "AWS::CloudFormation::Stack"
+    Properties:
+      TemplateURL: !Sub "https://s3.amazonaws.com/${S3BucketName}/ssm.yml"
+      Parameters:
+        SubnetId: !Ref "SubnetId"
+        EC2InstanceProfile: !GetAtt "SSMRoles.Outputs.EC2InstanceProfile"
+        SSMRoleARN: !GetAtt "SSMRoles.Outputs.SSMRoleARN"
+  SSMLambda:
+    Type: "AWS::CloudFormation::Stack"
+    Properties:
+      TemplateURL: !Sub "https://s3.amazonaws.com/${S3BucketName}/lambda.yml"
+      Parameters:
+        NewAMITopicARN: !Ref "NewAMITopicARN"
+        LambdaRoleARN: !GetAtt "SSMRoles.Outputs.LambdaRoleARN"
+        SSMRoleARN: !GetAtt "SSMRoles.Outputs.SSMRoleARN"
+        SSMAutomationDocument: !GetAtt "SSMDocument.Outputs.SSMAutomationDocument"
+  SSMEvent:
+    Type: "AWS::CloudFormation::Stack"
+    Properties:
+      TemplateURL: !Sub "https://s3.amazonaws.com/${S3BucketName}/event.yml"
+      Parameters:
+        NotificationEmail: !Ref "NotificationEmail"
