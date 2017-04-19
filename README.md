@@ -14,3 +14,10 @@ Workflow
 3. Automation document launches a new EC2 instance and runs required configuration commands.
 4. Once the configuration process has completed, SSM stops the instance and creates a new AMI. When the AMI is ready,  automation terminates the stopped instance.
 5. CloudWatch Event gets notified when the SSM has finished or failed the execution. It sends a message to the SNS topic which is subscribed by the notification email.
+
+Running stack
+-------------
+
+1. Upload all cloudformation templates except `main.yml` and `sns-subscription.yml` to the s3 bucket
+2. Run `main.yml` in the desired region and provide s3 bucket name where cloudformations were uploaded
+3. Run `sns-subscription` in the us-east-1 region and specify lambda ARN  from `SSMLambdaARN` output created in step 2
