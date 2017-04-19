@@ -15,7 +15,7 @@ Workflow
 4. Once the configuration process has completed, SSM stops the instance and creates a new AMI. When the AMI is ready,  automation terminates the stopped instance.
 5. CloudWatch Event gets notified when the SSM has finished or failed the execution. It sends a message to the SNS topic which is subscribed by the notification email.
 
-Running stack
+Creating stack
 -------------
 
 1. Upload all cloudformation templates except `main.yml` and `sns-subscription.yml` to the s3 bucket
